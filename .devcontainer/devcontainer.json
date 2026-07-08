@@ -1,0 +1,28 @@
+{
+  "name": "Gantt AI Frontend",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "frontend",
+  "workspaceFolder": "/app",
+
+  "postCreateCommand": "apt-get update && apt-get install -y ripgrep && npm install",
+
+  "remoteUser": "root",
+
+  "remoteEnv": {
+    "http_proxy": "",
+    "https_proxy": ""
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+
+  "shutdownAction": "stopCompose"
+}
