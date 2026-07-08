@@ -32,59 +32,32 @@ print(
 SYSTEM_PROMPT = """
 Ты AI ассистент управления диаграммой Ганта.
 
-Главное правило:
-Работай ТОЛЬКО с задачами из context.tasks.
+Работай только с задачами из context.tasks.
 
-Перед любым действием:
-
+Перед действием:
 1. Найди задачу в context.tasks.
-2. Сравни название задачи с text.
-3. Используй существующий id этой задачи.
-4. Никогда не придумывай id.
-5. Если задача не найдена — НЕ вызывай инструменты.
+2. Используй существующий id.
+3. Никогда не придумывай id.
+4. Если задачи нет — верни message.
 
-Удаление задачи:
+Создание:
+Используй create_task.
 
-Пользователь:
-удали задачу лосось
+Обновление:
+Используй update_task.
 
-Если есть:
+Удаление:
+Используй delete_task.
+
+После ответа:
+Если вызываешь инструмент — используй tool_calls.
+
+Если инструмент не нужен — верни JSON:
 
 {
-"id":"temp://1783455853275",
-"text":"лосось"
+ "action":"message",
+ "message":"текст"
 }
-
-Вызови:
-
-delete_task(
- task_id="temp://1783455853275"
-)
-
-Создание задачи:
-
-Пользователь:
-Добавь задачу маркетинговые исследования
-
-Вызови:
-
-create_task(
- text="Маркетинговые исследования"
-)
-
-Обновление задачи:
-
-Пользователь:
-Поставь Backend API 100%
-
-Вызови:
-
-update_task(
- task_id=id,
- progress=100
-)
-
-После выполнения возвращай только JSON.
 
 Не объясняй действия.
 """
@@ -96,7 +69,6 @@ async def ask_ai(
 ):
 
     if not OPENROUTER_API_KEY:
-
         return {
             "action": "error",
             "message": "OPENROUTER_API_KEY is missing"
@@ -104,6 +76,7 @@ async def ask_ai(
 
 
     mcp_tools = await get_mcp_tools()
+
 
     tools = []
 
@@ -121,9 +94,53 @@ async def ask_ai(
         )
 
 
+    payload = {
+
+        "model": MODEL,
+
+        "messages": [
+
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "message": message,
+                        "context": context
+                    },
+                    ensure_ascii=False
+                )
+            }
+
+        ],
+
+        "tools": tools,
+
+        "tool_choice": "auto",
+
+        "temperature": 0
+
+    }
+
+
+    print(
+        "AI REQUEST:",
+        json.dumps(
+            payload,
+            indent=2,
+            ensure_ascii=False
+        )
+    )
+
+
     async with httpx.AsyncClient(
         timeout=120
     ) as client:
+
 
         response = await client.post(
 
@@ -134,53 +151,40 @@ async def ask_ai(
                     f"Bearer {OPENROUTER_API_KEY}",
 
                 "Content-Type":
-                    "application/json",
+                    "application/json"
             },
 
-            json={
+            json=payload
 
-                "model": MODEL,
-
-                "messages": [
-
-                    {
-                        "role": "system",
-                        "content": SYSTEM_PROMPT
-                    },
-
-                    {
-                        "role": "user",
-                        "content": json.dumps(
-                            {
-                                "message": message,
-                                "context": context
-                            },
-                            ensure_ascii=False
-                        )
-                    }
-
-                ],
-
-                "tools": tools,
-
-                "tool_choice": "auto",
-
-                "temperature": 0
-            }
         )
-
-
-    data = response.json()
 
 
     print(
-        "OPENROUTER RESPONSE:",
-        json.dumps(
-            data,
-            indent=2,
-            ensure_ascii=False
-        )
+        "OPENROUTER STATUS:",
+        response.status_code
     )
+
+
+    raw = response.text
+
+
+    print(
+        "OPENROUTER RAW:",
+        raw
+    )
+
+
+    try:
+
+        data = response.json()
+
+    except Exception:
+
+        return {
+            "action": "error",
+            "message": raw
+        }
+
 
 
     if "choices" not in data:
@@ -191,7 +195,19 @@ async def ask_ai(
         }
 
 
+
     ai_message = data["choices"][0]["message"]
+
+
+    print(
+        "AI MESSAGE:",
+        json.dumps(
+            ai_message,
+            indent=2,
+            ensure_ascii=False
+        )
+    )
+
 
 
     tool_calls = ai_message.get(
@@ -201,9 +217,12 @@ async def ask_ai(
 
     if tool_calls:
 
+
         tool_call = tool_calls[0]
 
+
         tool_name = tool_call["function"]["name"]
+
 
         arguments = json.loads(
             tool_call["function"]["arguments"]
@@ -230,11 +249,13 @@ async def ask_ai(
 
 
         try:
+
             result = json.loads(result)
 
         except:
 
             pass
+
 
 
         if tool_name == "delete_task":
@@ -247,14 +268,16 @@ async def ask_ai(
             }
 
 
+
         if tool_name == "create_task":
 
             return {
                 "action": "create_task",
                 "data": {
-                    "task": result["task"]
+                    "task": result.get("task")
                 }
             }
+
 
 
         if tool_name in [
@@ -266,38 +289,38 @@ async def ask_ai(
             return {
                 "action": "update_task",
                 "data": {
-                    "id": arguments["task_id"],
+                    "id": arguments.get("task_id"),
                     "changes": arguments
                 }
             }
 
 
+
     content = ai_message.get(
-        "content",
-        ""
+        "content"
     )
 
 
     if content:
 
+
         try:
 
             parsed = json.loads(content)
 
-            if parsed.get("action") in [
-                "delete_task",
-                "create_task",
-                "update_task"
-            ]:
+            return parsed
 
-                return parsed
 
         except Exception:
 
-            pass
+            return {
+                "action": "message",
+                "message": content
+            }
+
 
 
     return {
         "action": "message",
-        "message": content or "AI не вернул ответ"
+        "message": "AI returned empty response"
     }
