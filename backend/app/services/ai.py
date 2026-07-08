@@ -18,6 +18,17 @@ MODEL = os.getenv(
 )
 
 
+print(
+    "OPENROUTER_API_KEY EXISTS:",
+    bool(OPENROUTER_API_KEY)
+)
+
+print(
+    "OPENROUTER_MODEL:",
+    MODEL
+)
+
+
 SYSTEM_PROMPT = """
 Ты AI ассистент управления диаграммой Ганта.
 
@@ -50,7 +61,6 @@ delete_task(
  task_id="temp://1783455853275"
 )
 
-
 Создание задачи:
 
 Пользователь:
@@ -61,7 +71,6 @@ delete_task(
 create_task(
  text="Маркетинговые исследования"
 )
-
 
 Обновление задачи:
 
@@ -75,47 +84,7 @@ update_task(
  progress=100
 )
 
-
-После выполнения возвращай только JSON:
-
-Удаление:
-
-{
- "action":"delete_task",
- "data":{
-   "id":"ID_ЗАДАЧИ"
- }
-}
-
-
-Создание:
-
-{
- "action":"create_task",
- "data":{
-   "task":{}
- }
-}
-
-
-Обновление:
-
-{
- "action":"update_task",
- "data":{
-   "id":"ID_ЗАДАЧИ",
-   "changes":{}
- }
-}
-
-
-Если задача не найдена:
-
-{
- "action":"message",
- "message":"Задача не найдена"
-}
-
+После выполнения возвращай только JSON.
 
 Не объясняй действия.
 """
@@ -126,6 +95,14 @@ async def ask_ai(
     context: dict
 ):
 
+    if not OPENROUTER_API_KEY:
+
+        return {
+            "action": "error",
+            "message": "OPENROUTER_API_KEY is missing"
+        }
+
+
     mcp_tools = await get_mcp_tools()
 
     tools = []
@@ -134,11 +111,11 @@ async def ask_ai(
 
         tools.append(
             {
-                "type":"function",
-                "function":{
-                    "name":tool.name,
-                    "description":tool.description,
-                    "parameters":tool.inputSchema
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.inputSchema
                 }
             }
         )
@@ -162,21 +139,21 @@ async def ask_ai(
 
             json={
 
-                "model":MODEL,
+                "model": MODEL,
 
-                "messages":[
+                "messages": [
 
                     {
-                        "role":"system",
-                        "content":SYSTEM_PROMPT
+                        "role": "system",
+                        "content": SYSTEM_PROMPT
                     },
 
                     {
-                        "role":"user",
-                        "content":json.dumps(
+                        "role": "user",
+                        "content": json.dumps(
                             {
-                                "message":message,
-                                "context":context
+                                "message": message,
+                                "context": context
                             },
                             ensure_ascii=False
                         )
@@ -184,11 +161,11 @@ async def ask_ai(
 
                 ],
 
-                "tools":tools,
+                "tools": tools,
 
-                "tool_choice":"auto",
+                "tool_choice": "auto",
 
-                "temperature":0
+                "temperature": 0
             }
         )
 
@@ -197,6 +174,7 @@ async def ask_ai(
 
 
     print(
+        "OPENROUTER RESPONSE:",
         json.dumps(
             data,
             indent=2,
@@ -208,8 +186,8 @@ async def ask_ai(
     if "choices" not in data:
 
         return {
-            "action":"error",
-            "message":data
+            "action": "error",
+            "message": data
         }
 
 
@@ -225,9 +203,7 @@ async def ask_ai(
 
         tool_call = tool_calls[0]
 
-
         tool_name = tool_call["function"]["name"]
-
 
         arguments = json.loads(
             tool_call["function"]["arguments"]
@@ -264,9 +240,9 @@ async def ask_ai(
         if tool_name == "delete_task":
 
             return {
-                "action":"delete_task",
-                "data":{
-                    "id":arguments["task_id"]
+                "action": "delete_task",
+                "data": {
+                    "id": arguments["task_id"]
                 }
             }
 
@@ -274,9 +250,9 @@ async def ask_ai(
         if tool_name == "create_task":
 
             return {
-                "action":"create_task",
-                "data":{
-                    "task":result["task"]
+                "action": "create_task",
+                "data": {
+                    "task": result["task"]
                 }
             }
 
@@ -288,10 +264,10 @@ async def ask_ai(
         ]:
 
             return {
-                "action":"update_task",
-                "data":{
-                    "id":arguments["task_id"],
-                    "changes":arguments
+                "action": "update_task",
+                "data": {
+                    "id": arguments["task_id"],
+                    "changes": arguments
                 }
             }
 
@@ -322,6 +298,6 @@ async def ask_ai(
 
 
     return {
-        "action":"message",
-        "message":content or "AI не вернул ответ"
+        "action": "message",
+        "message": content or "AI не вернул ответ"
     }
