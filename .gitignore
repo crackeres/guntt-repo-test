@@ -39,9 +39,9 @@ uploads/
 *.xls
 
 # Local data
-data/
 *.sqlite
 *.db
+*__pycache__
 
 # Build
 dist/
